@@ -1,105 +1,95 @@
-# ⚡ Predictive Maintenance SUTM Dashboard
-**PT PLN UP3 Bandung — 2026**
+# ⚡ SUTM Predictive Maintenance Dashboard
 
-Dashboard interaktif untuk analisis data inspeksi SUTM (Saluran Udara Tegangan Menengah) dengan pembaruan otomatis setiap kali data Excel diperbarui.
+**Academic project · Telkom University · Data courtesy of PT PLN UP3 Bandung**
 
----
+An interactive Streamlit dashboard that analyzes visual and thermal
+inspection data of medium-voltage overhead distribution lines (SUTM),
+scores asset health and risk, and ranks poles for maintenance
+priority using machine learning.
 
-## 🚀 Cara Menjalankan
+![Dashboard Overview](docs/dashboard-overview.png)
 
-### 1. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
+## 🎯 Problem & Approach
 
-### 2. Siapkan File Excel
-Letakkan dua file Excel di folder yang sama dengan `app.py`:
-- `1__INSPEKSI_SUTM_T1_2026.xlsx` — Data inspeksi visual (SUTMT1)
-- `2__INSPEKSI_SUTM_T2_-_2026.xlsx` — Data inspeksi thermal (SUTMT2)
+Inspection data for overhead lines is collected in spreadsheets, which
+makes it hard to see which feeders and components need attention first.
+This project turns 16,419 visual and 1,305 thermal inspection records
+(10,789 unique poles) into an interactive dashboard that supports
+condition-based maintenance decisions.
 
-### 3. Jalankan Dashboard
-```bash
-streamlit run app.py
-```
+**Pipeline:** component condition text → health index (0–3) →
+rule-based risk class (Critical / High / Medium / Low) → risk score →
+ML model comparison → maintenance priority list.
 
-Dashboard akan terbuka otomatis di browser: `http://localhost:8501`
+## ✨ Key Features
 
----
+| Tab | Contents |
+|-----|----------|
+| 📊 Overview | KPI cards, risk distribution, risk by ULP, monthly inspection volume |
+| ⚠️ Risk Analysis | Risk treemap, top feeders, per-ULP summary |
+| 🔬 Health Index | 12-component health index, heatmap, worst-condition ranking |
+| 🌡️ Thermal | ΔT distribution and thermal health index |
+| 🤖 ML Results | Model comparison (F1-score), cross-validation stability |
+| 🎯 Priority List | Sortable maintenance priority table with CSV export |
 
-## 🔄 Update Data Otomatis
+- Filters by ULP area, risk class and feeder
+- Auto-refresh every 30 seconds, or upload new Excel files from the sidebar
+- Dark-theme interface
 
-Dashboard akan **refresh otomatis setiap 30 detik**.
+## 🛠 Tech Stack
 
-Caranya:
-1. Aktifkan toggle **"Auto-refresh (30s)"** di sidebar
-2. Tambahkan data baru ke file Excel
-3. Dashboard akan memuat data terbaru secara otomatis
+Python · Streamlit · Pandas · NumPy · Plotly
 
-Atau: Upload file Excel baru langsung dari sidebar menggunakan **"Upload new Excel files"**
+## 📈 Results
 
----
+Five classifiers were compared using 5-fold stratified cross-validation
+on 10,789 unique poles with 12 visual health-index features.
+Risk classes were derived from a rule-based classification of
+component conditions.
 
-## 🌐 Deploy ke Streamlit Cloud (Gratis)
+| Model | Accuracy | F1-Score |
+|-------|----------|----------|
+| **XGBoost** | **0.9342** | **0.9329** |
+| Random Forest | 0.8544 | 0.8578 |
+| Decision Tree | 0.8274 | 0.8396 |
+| SVM | 0.7886 | 0.7937 |
+| KNN | 0.7767 | 0.7685 |
 
-### Langkah 1 — Upload ke GitHub
-```bash
-git init
-git add .
-git commit -m "first commit"
-git branch -M main
-git remote add origin https://github.com/USERNAME/REPO_NAME.git
-git push -u origin main
-```
+XGBoost achieved the best performance, with a fold-to-fold standard
+deviation of ±0.0136.
 
-### Langkah 2 — Connect ke Streamlit Cloud
-1. Buka [streamlit.io/cloud](https://streamlit.io/cloud)
-2. Login dengan akun GitHub
-3. Klik **"New app"**
-4. Pilih repository → pilih `app.py` sebagai main file
-5. Klik **"Deploy!"**
+> **Note:** The dataset is highly imbalanced (about 95.7% Low risk and
+> a single Critical pole), so weighted F1 is reported alongside accuracy.
+> Because labels come from a rule-based classification, the scores
+> reflect how well each model learns that rule from the health-index features.
 
-Selesai! Dalam ~2 menit dashboard online dan bisa diakses siapa saja.
+## 🚀 Getting Started
 
----
+    git clone https://github.com/Muat01/sutm-predictive-maintenance-dashboard.git
+    cd sutm-predictive-maintenance-dashboard
+    pip install -r requirements.txt
+    streamlit run app.py
 
-## 📁 Struktur File
+The app opens at `http://localhost:8501`.
 
-```
-├── app.py                          # Main Streamlit app
-├── requirements.txt                # Python dependencies
-├── README.md                       # This file
-├── .streamlit/
-│   └── config.toml                 # Dark theme config
-├── 1__INSPEKSI_SUTM_T1_2026.xlsx  # Visual inspection data
-└── 2__INSPEKSI_SUTM_T2_-_2026.xlsx # Thermal inspection data
-```
+## 📂 Data Availability
 
-> ⚠️ **Penting**: Jangan upload file Excel ke GitHub jika datanya sensitif.
-> Gunakan fitur **Upload** di sidebar untuk upload data secara langsung.
+The inspection data was provided by PT PLN UP3 Bandung for an academic
+case study and is **not included** in this repository. To request access,
+please contact me via [LinkedIn](https://www.linkedin.com/in/muatasem-hadi).
 
----
+To run the dashboard, place the two inspection Excel files next to
+`app.py` (file names must contain `SUTM` and `T1` / `T2`), or upload
+them from the dashboard sidebar.
 
-## 📊 Fitur Dashboard
+## 📁 Project Structure
 
-| Tab | Isi |
-|-----|-----|
-| 📊 Overview | KPI cards, donut chart, distribusi per ULP, histogram risk score, monthly progress |
-| ⚠️ Risk Analysis | Treemap, top penyulang, tabel summary per ULP |
-| 🔬 Health Index | Stacked bar 12 komponen, heatmap per ULP, ranking BURUK |
-| 🌡️ Thermal | Distribusi ΔT, HI-1 chart, summary per ULP |
-| 🤖 ML Results | F1-Score comparison, fold stability, grouped metrics |
-| 🎯 Priority List | Tabel sortir + download CSV |
+    ├── app.py                 # Main Streamlit app
+    ├── requirements.txt       # Dependencies
+    ├── .streamlit/config.toml # Theme configuration
+    └── docs/                  # Screenshots
 
----
+## 👤 Author
 
-## ⚙️ Konfigurasi
-
-Edit baris ini di `app.py` untuk mengubah path default file Excel:
-```python
-t1_path = "1__INSPEKSI_SUTM_T1_2026.xlsx"
-t2_path = "2__INSPEKSI_SUTM_T2_-_2026.xlsx"
-```
-
----
-
-*Developed for PT PLN UP3 Bandung Predictive Maintenance Program 2026*
+**Muatasem Hadi** · MEng Candidate in Industrial Engineering,
+Telkom University · [LinkedIn](https://www.linkedin.com/in/muatasem-hadi)
