@@ -89,7 +89,7 @@ them from the dashboard sidebar.
     ├── .streamlit/config.toml # Theme configuration
     └── docs/                  # Screenshots
 
-## 👤 Author
+## Author
 
 **Muatasem Hadi** · MEng Candidate in Industrial Engineering,
 Telkom University · [LinkedIn](https://www.linkedin.com/in/muatasem-hadi)
