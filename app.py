@@ -4,6 +4,9 @@ PT PLN UP3 Bandung — 2026
 Run: streamlit run app.py
 """
 
+import os
+import tempfile
+from datetime import datetime
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -234,8 +237,8 @@ with st.sidebar:
 
         if t1_file and t2_file:
             # Save uploaded files temporarily
-            t1_path = f"/tmp/SUTM_T1_{t1_file.name}"
-            t2_path = f"/tmp/SUTM_T2_{t2_file.name}"
+            t1_path = os.path.join(tempfile.gettempdir(), f"SUTM_T1_{t1_file.name}")
+            t2_path = os.path.join(tempfile.gettempdir(), f"SUTM_T2_{t2_file.name}")
             with open(t1_path, 'wb') as f: f.write(t1_file.read())
             with open(t2_path, 'wb') as f: f.write(t2_file.read())
             st.success("✓ Files loaded!")
@@ -244,8 +247,8 @@ with st.sidebar:
             st.stop()
     else:
         # Default paths — change these to your file paths
-        t1_path = "1__INSPEKSI_SUTM_T1_2026.xlsx"
-        t2_path = "2__INSPEKSI_SUTM_T2_-_2026.xlsx"
+        t1_path = "1. INSPEKSI SUTM T1 2026.xlsx"
+        t2_path = "2. INSPEKSI SUTM T2 2026.xlsx"
 
         if not (os.path.exists(t1_path) and os.path.exists(t2_path)):
             st.error("⚠️ Excel files not found! Upload them using the toggle above.")
