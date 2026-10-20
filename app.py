@@ -143,12 +143,14 @@ def find_excel(keyword: str):
     'SUTM' and the keyword (T1 / T2). Works with any naming style."""
     here = os.path.dirname(os.path.abspath(__file__))
     for folder in (here, os.path.join(here, 'data')):
-        for path in sorted(glob.glob(os.path.join(folder, '*.xlsx'))):
-            name = os.path.basename(path).upper()
-            if name.startswith('~$'):
+        if not os.path.isdir(folder):
+            continue
+        for fname in sorted(os.listdir(folder)):
+            upper = fname.upper()
+            if upper.startswith('~$') or not upper.endswith('.XLSX'):
                 continue
-            if 'SUTM' in name and keyword in name:
-                return path
+            if 'SUTM' in upper and keyword in upper:
+                return os.path.join(folder, fname)
     return None
 
 
