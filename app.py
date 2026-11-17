@@ -17,6 +17,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from sutm_core import (COMP_LABELS, COND_COLS, HI_MAP, add_health_index, delta_temperature,
+                       merge_thermal, pole_id, priority_table, thermal_summary, worst_case_per_pole)
+from theme import CSS, FONT_SANS, RISK_COLORS, layout
+
 # ─── PAGE CONFIG ────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Predictive Maintenance SUTM",
@@ -25,116 +29,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── CUSTOM CSS ─────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap');
+# ─── STYLE (shared MH Emerald & Gold identity) ───────────────────────────────
+st.markdown(CSS, unsafe_allow_html=True)
 
-html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-
-/* Hide Streamlit branding */
-#MainMenu, footer, header { visibility: hidden; }
-
-/* Main background */
-.stApp { background-color: #0a0c10; }
-
-/* Sidebar */
-section[data-testid="stSidebar"] {
-    background-color: #0f1218 !important;
-    border-right: 1px solid rgba(255,255,255,0.07);
-}
-section[data-testid="stSidebar"] * { color: #8b92a8 !important; }
-
-/* Metric cards */
-[data-testid="metric-container"] {
-    background: #0f1218;
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 14px;
-    padding: 16px !important;
-}
-[data-testid="stMetricLabel"] { color: #4a5168 !important; font-family: 'DM Mono', monospace !important; font-size: 10px !important; letter-spacing: 1px !important; text-transform: uppercase !important; }
-[data-testid="stMetricValue"] { font-family: 'Syne', sans-serif !important; font-weight: 800 !important; font-size: 2rem !important; }
-[data-testid="stMetricDelta"] { font-family: 'DM Mono', monospace !important; font-size: 11px !important; }
-
-/* Dataframe */
-[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
-
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] { background: #0f1218; border-bottom: 1px solid rgba(255,255,255,0.07); gap: 4px; }
-.stTabs [data-baseweb="tab"] { color: #4a5168 !important; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.5px; }
-.stTabs [aria-selected="true"] { color: #00d4aa !important; border-bottom-color: #00d4aa !important; }
-
-/* Selectbox */
-.stSelectbox label { color: #4a5168 !important; font-family: 'DM Mono', monospace !important; font-size: 10px !important; letter-spacing: 1px !important; text-transform: uppercase !important; }
-
-/* Section header */
-.sec-header {
-    font-family: 'Syne', sans-serif;
-    font-size: 20px;
-    font-weight: 700;
-    color: #e8eaf0;
-    margin-bottom: 4px;
-}
-.sec-sub {
-    font-size: 12px;
-    color: #4a5168;
-    margin-bottom: 20px;
-    font-weight: 300;
-}
-
-/* Update time */
-.update-time { font-family:'DM Mono',monospace; font-size:10px; color:#4a5168; }
-</style>
-""", unsafe_allow_html=True)
-
-# ─── PLOTLY THEME ────────────────────────────────────────────────────────────
-PLOT_LAYOUT = dict(
-    paper_bgcolor='rgba(0,0,0,0)',
-    plot_bgcolor='rgba(0,0,0,0)',
-    font=dict(family='DM Sans', color='#8b92a8', size=11),
-    margin=dict(l=10, r=10, t=30, b=10),
-    showlegend=True,
-    legend=dict(font=dict(size=10), bgcolor='rgba(0,0,0,0)'),
-    xaxis=dict(gridcolor='rgba(255,255,255,0.05)', linecolor='rgba(255,255,255,0.07)', tickfont=dict(size=10)),
-    yaxis=dict(gridcolor='rgba(255,255,255,0.05)', linecolor='rgba(255,255,255,0.07)', tickfont=dict(size=10)),
-)
-COLORS = {'CRITICAL': '#ff4757', 'HIGH': '#ffa502', 'MEDIUM': '#3d8eff', 'LOW': '#00d4aa'}
-
-
-def layout(**overrides):
-    """Return PLOT_LAYOUT with overrides applied (no duplicate-keyword errors).
-    xaxis / yaxis / legend dicts are merged with the defaults instead of replaced."""
-    merged = dict(PLOT_LAYOUT)
-    for key, value in overrides.items():
-        if key in ('xaxis', 'yaxis', 'legend') and isinstance(value, dict):
-            merged[key] = {**PLOT_LAYOUT[key], **value}
-        else:
-            merged[key] = value
-    return merged
-
-
-# ─── CONSTANTS ───────────────────────────────────────────────────────────────
-COND_COLS = [
-    'KONDISI TIANG', 'KONDISI EKSTENSI', 'KONDISI TRAVERS', 'KONDISI GSW',
-    'KONDISI PENYANGGA TIANG', 'KONDISI PENAMPANG', 'KONDISI JUMPER',
-    'KONDISI PENGIKAT', 'KONDISI ISOLATOR TUMPU', 'KONDISI ISOLATOR AFSPAN',
-    'KONDISI ARRESTER', 'KONDISI FCO'
-]
-COMP_LABELS = {
-    'KONDISI TIANG': 'Tiang (Pole)',
-    'KONDISI EKSTENSI': 'Ekstensi',
-    'KONDISI TRAVERS': 'Travers',
-    'KONDISI GSW': 'GSW',
-    'KONDISI PENYANGGA TIANG': 'Penyangga',
-    'KONDISI PENAMPANG': 'Penampang',
-    'KONDISI JUMPER': 'Jumper',
-    'KONDISI PENGIKAT': 'Pengikat',
-    'KONDISI ISOLATOR TUMPU': 'Isolator Tumpu',
-    'KONDISI ISOLATOR AFSPAN': 'Isolator Afspan',
-    'KONDISI ARRESTER': 'Arrester',
-    'KONDISI FCO': 'FCO',
-}
-HI_MAP = {'BAIK': 3, 'CUKUP': 2, 'KURANG': 1, 'BURUK': 0}
+# ─── PLOTLY THEME (shared MH Emerald & Gold identity) ───────────────────────
+COLORS = RISK_COLORS
 
 
 # ─── FILE DISCOVERY ──────────────────────────────────────────────────────────
@@ -157,83 +56,19 @@ def find_excel(keyword: str):
 # ─── DATA LOADING ─────────────────────────────────────────────────────────────
 @st.cache_data(ttl=30)  # cache for 30 seconds
 def load_data(t1_path: str, t2_path: str):
-    """Load and process SUTM inspection data."""
-
+    """Read both inspection sheets and score them with sutm_core."""
     t1 = pd.read_excel(t1_path, sheet_name='DATA')
     t2 = pd.read_excel(t2_path, sheet_name='DATA')
 
-    # ── Condition text -> health index (3 = good ... 0 = bad) ─────────────
-    def hi_from_text(val):
-        if pd.isna(val) or str(val).strip().upper() in ['BLANK', 'TIDAK ADA', '-', '']:
-            return 3
-        v = str(val).upper()
-        if any(x in v for x in ['BURUK', 'PECAH', 'PUTUS', 'KEROPOS', 'FLASH', 'BOCOR', 'RANTAS', 'RETAK']):
-            return 0
-        if any(x in v for x in ['KURANG', 'KENDOR', 'LEPAS', 'MIRING', 'LONGGAR', 'BELUM', 'RAMBAT']):
-            return 1
-        if any(x in v for x in ['CUKUP', 'LUMUT', 'BERKARAT', 'PARALON']):
-            return 2
-        return 3
+    t1, hi_cols = add_health_index(t1)
+    t1['TIANG_ID'] = pole_id(t1)
 
-    for c in COND_COLS:
-        if c in t1.columns:
-            t1[f'HI_{c}'] = t1[c].apply(hi_from_text)
-
-    hi_cols = [f'HI_{c}' for c in COND_COLS if c in t1.columns]
-
-    # ── Defect counts ─────────────────────────────────────────────────────
-    t1['N_BURUK'] = t1[hi_cols].apply(lambda r: (r == 0).sum(), axis=1)
-    t1['N_KURANG'] = t1[hi_cols].apply(lambda r: (r == 1).sum(), axis=1)
-    t1['TIANG_ID'] = t1['PENYULANG'].astype(str).str.strip() + '_' + t1['NO TIANG'].astype(str).str.strip()
-
-    # ── T2 thermal ────────────────────────────────────────────────────────
-    t2['TIANG_ID'] = t2['PENYULANG'].astype(str).str.strip() + '_' + t2['NO TIANG'].astype(str).str.strip()
+    t2['TIANG_ID'] = pole_id(t2)
     t2['NUM_HI_1'] = t2['HI SUTM  - 1'].map(HI_MAP).fillna(3)
     t2['NUM_HI_2'] = t2['HI SUTM - 2'].map(HI_MAP).fillna(3)
-    temp_cols = ['SUHU FASA R', 'SUHU FASA S', 'SUHU FASA T']
-    vt = t2[temp_cols].apply(pd.to_numeric, errors='coerce')
-    t2['DELTA_SUHU'] = (vt.max(axis=1) - vt.min(axis=1)).fillna(0)
+    t2['DELTA_SUHU'] = delta_temperature(t2)
 
-    # ── Worst case per unique pole ────────────────────────────────────────
-    worst = t1.groupby(['TIANG_ID', 'ULP', 'PENYULANG', 'NO TIANG']).agg(
-        N_BURUK=('N_BURUK', 'max'),
-        N_KURANG=('N_KURANG', 'max'),
-        SECTION=('SECTION', 'first'),
-        ZONA=('ZONA', 'first'),
-        PETUGAS=('PETUGAS', 'last'),
-        TANGGAL=('TANGGAL', 'max'),
-    ).reset_index()
-
-    # ── Rule-based risk classification ────────────────────────────────────
-    def classify(nb, nk):
-        if nb >= 2:
-            return 'CRITICAL'
-        if nb == 1:
-            return 'HIGH'
-        if nk >= 1:
-            return 'MEDIUM'
-        return 'LOW'
-
-    worst['RISK_CLASS'] = worst.apply(lambda r: classify(r['N_BURUK'], r['N_KURANG']), axis=1)
-
-    # ── Risk score (small random jitter only to separate ties in charts) ──
-    base = {'LOW': 15, 'MEDIUM': 40, 'HIGH': 70, 'CRITICAL': 90}
-    rng = np.random.default_rng(42)
-    worst['RISK_SCORE'] = (worst['RISK_CLASS'].map(base)
-                           + worst['N_BURUK'] * 3
-                           + worst['N_KURANG'] * 1
-                           + rng.uniform(-2, 2, len(worst))).clip(0, 100).round(1)
-
-    # ── Merge thermal data ────────────────────────────────────────────────
-    t2_agg = t2.groupby('TIANG_ID').agg(
-        DELTA_SUHU=('DELTA_SUHU', 'max'),
-        NUM_HI_1=('NUM_HI_1', 'min'),
-        NUM_HI_2=('NUM_HI_2', 'min'),
-    ).reset_index()
-    worst = worst.merge(t2_agg, on='TIANG_ID', how='left')
-    worst['HAS_THERMAL'] = worst['TIANG_ID'].isin(t2['TIANG_ID'])
-    worst['DELTA_SUHU'] = worst['DELTA_SUHU'].fillna(0)
-
+    worst = merge_thermal(worst_case_per_pole(t1), thermal_summary(t2), t2['TIANG_ID'])
     return t1, t2, worst, hi_cols
 
 
@@ -241,15 +76,15 @@ def load_data(t1_path: str, t2_path: str):
 with st.sidebar:
     st.markdown("""
     <div style="padding:8px 0 16px;">
-      <div style="font-size:9px;font-family:'DM Mono',monospace;color:#00d4aa;letter-spacing:2px;margin-bottom:6px;">⚡ SUTM ANALYTICS</div>
-      <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:#e8eaf0;line-height:1.3;">Predictive Maintenance<br>SUTM Dashboard</div>
-      <div style="font-size:10px;color:#4a5168;margin-top:4px;">Medium Voltage Overhead Line</div>
+      <div style="font-size:9px;font-family:'DM Mono',monospace;color:#22C98A;letter-spacing:2px;margin-bottom:6px;">⚡ SUTM ANALYTICS</div>
+      <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:#EEF2EF;line-height:1.3;">Predictive Maintenance<br>SUTM Dashboard</div>
+      <div style="font-size:10px;color:#2A3530;margin-top:4px;">Medium Voltage Overhead Line</div>
     </div>
     """, unsafe_allow_html=True)
 
     st.divider()
 
-    st.markdown('<div style="font-size:10px;font-family:\'DM Mono\',monospace;color:#4a5168;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">DATA SOURCE</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:10px;font-family:\'DM Mono\',monospace;color:#2A3530;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">DATA SOURCE</div>', unsafe_allow_html=True)
 
     use_upload = st.toggle("Upload new Excel files", value=False)
 
@@ -289,11 +124,11 @@ with st.sidebar:
 
     auto_refresh = st.toggle("Auto-refresh (30s)", value=False)
     if auto_refresh:
-        st.markdown('<div style="font-size:10px;color:#00d4aa;font-family:\'DM Mono\',monospace;">● Live updating...</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:10px;color:#22C98A;font-family:\'DM Mono\',monospace;">● Live updating...</div>', unsafe_allow_html=True)
 
     st.divider()
 
-    st.markdown('<div style="font-size:10px;font-family:\'DM Mono\',monospace;color:#4a5168;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">FILTERS</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:10px;font-family:\'DM Mono\',monospace;color:#2A3530;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">FILTERS</div>', unsafe_allow_html=True)
 
 # ─── LOAD DATA ────────────────────────────────────────────────────────────────
 try:
@@ -338,12 +173,12 @@ if sel_peny != 'All':
 st.markdown(f"""
 <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.07);">
   <div>
-    <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#e8eaf0;">Predictive Maintenance SUTM</div>
-    <div style="font-size:12px;color:#4a5168;margin-top:3px;font-weight:300;">Medium-voltage overhead lines &nbsp;·&nbsp; {len(t1_df):,} visual records &nbsp;·&nbsp; {len(t2_df):,} thermal records</div>
+    <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#EEF2EF;">Predictive Maintenance SUTM</div>
+    <div style="font-size:12px;color:#2A3530;margin-top:3px;font-weight:300;">Medium-voltage overhead lines &nbsp;·&nbsp; {len(t1_df):,} visual records &nbsp;·&nbsp; {len(t2_df):,} thermal records</div>
   </div>
   <div style="text-align:right;">
-    <div style="font-size:9px;font-family:'DM Mono',monospace;color:#00d4aa;letter-spacing:1px;">● LIVE</div>
-    <div style="font-size:10px;font-family:'DM Mono',monospace;color:#4a5168;margin-top:2px;">{datetime.now().strftime("%d %b %Y · %H:%M")}</div>
+    <div style="font-size:9px;font-family:'DM Mono',monospace;color:#22C98A;letter-spacing:1px;">● LIVE</div>
+    <div style="font-size:10px;font-family:'DM Mono',monospace;color:#2A3530;margin-top:2px;">{datetime.now().strftime("%d %b %Y · %H:%M")}</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -401,7 +236,7 @@ with tab1:
             fig_donut.add_annotation(
                 text=f"<b>{total_t:,}</b><br><span style='font-size:10px'>poles</span>",
                 x=0.5, y=0.5, showarrow=False,
-                font=dict(size=20, family='Syne', color='#e8eaf0'),
+                font=dict(size=20, family='Syne', color='#EEF2EF'),
                 align='center'
             )
             fig_donut.update_layout(**layout(
@@ -437,7 +272,7 @@ with tab1:
                 monthly = monthly.sort_values('Month')
                 fig_month = px.bar(monthly, x='Month', y='Records',
                                    title='Monthly Inspection Volume (SUTMT1)',
-                                   color='Records', color_continuous_scale=['#1c2230', '#00d4aa'])
+                                   color='Records', color_continuous_scale=['#1F2824', '#22C98A'])
                 fig_month.update_layout(**layout(height=240, coloraxis_showscale=False))
                 st.plotly_chart(fig_month, use_container_width=True)
 
@@ -463,7 +298,7 @@ with tab2:
                 fig_peny = px.bar(top_peny, x='Defective Poles', y='Penyulang',
                                   orientation='h', title='Top 15 Penyulang by Critical+High Poles',
                                   color='Defective Poles',
-                                  color_continuous_scale=['#ffa502', '#ff4757'])
+                                  color_continuous_scale=['#E6B94A', '#F0616D'])
                 fig_peny.update_layout(**layout(height=400, coloraxis_showscale=False))
                 st.plotly_chart(fig_peny, use_container_width=True)
 
@@ -510,7 +345,7 @@ with tab3:
 
     fig_hi = px.bar(hi_melt, x='Count', y='Component', color='Condition',
                     orientation='h', barmode='stack',
-                    color_discrete_map={'BAIK': '#00d4aa', 'CUKUP': '#3d8eff', 'KURANG': '#ffa502', 'BURUK': '#ff4757'},
+                    color_discrete_map={'BAIK': '#22C98A', 'CUKUP': '#6FA8FF', 'KURANG': '#E6B94A', 'BURUK': '#F0616D'},
                     title=f'Health Index — All {len(hi_df)} Components ({len(t1_df):,} Records)',
                     category_orders={'Condition': ['BAIK', 'CUKUP', 'KURANG', 'BURUK']})
     fig_hi.update_layout(**layout(height=420, yaxis_title='', xaxis_title='Record Count'))
@@ -525,7 +360,7 @@ with tab3:
         else:
             fig_buruk = px.bar(buruk_df, x='Component', y='BURUK',
                                title='BURUK Count by Component',
-                               color='BURUK', color_continuous_scale=['#ffa502', '#ff4757'])
+                               color='BURUK', color_continuous_scale=['#E6B94A', '#F0616D'])
             fig_buruk.update_layout(**layout(height=280, coloraxis_showscale=False,
                                              xaxis_tickangle=-30, xaxis_title='',
                                              yaxis_title='BURUK count'))
@@ -542,7 +377,7 @@ with tab3:
         if heatmap_data:
             hm = pd.concat(heatmap_data)
             hm_pivot = hm.pivot(index='Component', columns='ULP', values='HI')
-            fig_hm = px.imshow(hm_pivot, color_continuous_scale=['#ff4757', '#ffa502', '#00d4aa'],
+            fig_hm = px.imshow(hm_pivot, color_continuous_scale=['#F0616D', '#E6B94A', '#22C98A'],
                                zmin=0, zmax=3, title='Avg Health Index per Component × ULP',
                                aspect='auto', text_auto='.1f')
             fig_hm.update_layout(**layout(height=280))
@@ -575,10 +410,10 @@ with tab4:
     with col1:
         fig_delta = px.histogram(t2_df, x='DELTA_SUHU', nbins=30,
                                  title='Phase Temperature Delta Distribution (°C)',
-                                 color_discrete_sequence=['#a55eea'])
-        fig_delta.add_vline(x=10, line_dash='dash', line_color='#ffa502',
+                                 color_discrete_sequence=['#9479E6'])
+        fig_delta.add_vline(x=10, line_dash='dash', line_color='#E6B94A',
                             annotation_text='KURANG threshold (10°C)')
-        fig_delta.add_vline(x=15, line_dash='dash', line_color='#ff4757',
+        fig_delta.add_vline(x=15, line_dash='dash', line_color='#F0616D',
                             annotation_text='BURUK threshold (15°C)')
         fig_delta.update_layout(**layout(height=300, xaxis_title='ΔT (°C)', yaxis_title='Records'))
         st.plotly_chart(fig_delta, use_container_width=True)
@@ -587,7 +422,7 @@ with tab4:
         hi1_df = t2_df['NUM_HI_1'].value_counts().reset_index()
         hi1_df.columns = ['HI Score', 'Count']
         hi1_df['Label'] = hi1_df['HI Score'].map({3: 'BAIK', 2: 'CUKUP', 1: 'KURANG', 0: 'BURUK'})
-        hi1_df['Color'] = hi1_df['HI Score'].map({3: '#00d4aa', 2: '#3d8eff', 1: '#ffa502', 0: '#ff4757'})
+        hi1_df['Color'] = hi1_df['HI Score'].map({3: '#22C98A', 2: '#6FA8FF', 1: '#E6B94A', 0: '#F0616D'})
         fig_hi1 = go.Figure(go.Bar(
             x=hi1_df['Label'], y=hi1_df['Count'],
             marker_color=hi1_df['Color'].tolist(),
@@ -620,11 +455,11 @@ with tab5:
     )
 
     ml_data = pd.DataFrame([
-        {'Model': 'XGBoost',       'Accuracy': 0.9342, 'Precision': 0.9385, 'Recall': 0.9342, 'F1-Score': 0.9329, '±Std': 0.0136, 'Rank': 1, 'Color': '#00d4aa'},
-        {'Model': 'Random Forest', 'Accuracy': 0.8544, 'Precision': 0.8724, 'Recall': 0.8544, 'F1-Score': 0.8578, '±Std': 0.0223, 'Rank': 2, 'Color': '#3d8eff'},
-        {'Model': 'Decision Tree', 'Accuracy': 0.8274, 'Precision': 0.8672, 'Recall': 0.8274, 'F1-Score': 0.8396, '±Std': 0.0187, 'Rank': 3, 'Color': '#ffa502'},
-        {'Model': 'SVM',           'Accuracy': 0.7886, 'Precision': 0.8158, 'Recall': 0.7886, 'F1-Score': 0.7937, '±Std': 0.0205, 'Rank': 4, 'Color': '#ff6b9d'},
-        {'Model': 'KNN',           'Accuracy': 0.7767, 'Precision': 0.7856, 'Recall': 0.7767, 'F1-Score': 0.7685, '±Std': 0.0138, 'Rank': 5, 'Color': '#a55eea'},
+        {'Model': 'XGBoost',       'Accuracy': 0.9342, 'Precision': 0.9385, 'Recall': 0.9342, 'F1-Score': 0.9329, '±Std': 0.0136, 'Rank': 1, 'Color': '#22C98A'},
+        {'Model': 'Random Forest', 'Accuracy': 0.8544, 'Precision': 0.8724, 'Recall': 0.8544, 'F1-Score': 0.8578, '±Std': 0.0223, 'Rank': 2, 'Color': '#6FA8FF'},
+        {'Model': 'Decision Tree', 'Accuracy': 0.8274, 'Precision': 0.8672, 'Recall': 0.8274, 'F1-Score': 0.8396, '±Std': 0.0187, 'Rank': 3, 'Color': '#E6B94A'},
+        {'Model': 'SVM',           'Accuracy': 0.7886, 'Precision': 0.8158, 'Recall': 0.7886, 'F1-Score': 0.7937, '±Std': 0.0205, 'Rank': 4, 'Color': '#D05A74'},
+        {'Model': 'KNN',           'Accuracy': 0.7767, 'Precision': 0.7856, 'Recall': 0.7767, 'F1-Score': 0.7685, '±Std': 0.0138, 'Rank': 5, 'Color': '#9479E6'},
     ])
 
     col1, col2 = st.columns(2)
@@ -651,7 +486,7 @@ with tab5:
                                     var_name='Metric', value_name='Score')
         fig_grouped = px.bar(metrics_melt, x='Model', y='Score', color='Metric',
                              barmode='group', title='All Metrics — Grouped',
-                             color_discrete_sequence=['#00d4aa', '#3d8eff', '#ffa502', '#ff6b9d'])
+                             color_discrete_sequence=['#22C98A', '#6FA8FF', '#E6B94A', '#D05A74'])
         fig_grouped.update_layout(**layout(
             height=320, xaxis_title='', yaxis_title='Score',
             yaxis=dict(range=[0.6, 1.0])))
@@ -665,8 +500,8 @@ with tab5:
         'KNN':           [0.77, 0.77, 0.76, 0.77, 0.77],
     }
     colors_map = {
-        'XGBoost': '#00d4aa', 'Random Forest': '#3d8eff',
-        'Decision Tree': '#ffa502', 'SVM': '#ff6b9d', 'KNN': '#a55eea'
+        'XGBoost': '#22C98A', 'Random Forest': '#6FA8FF',
+        'Decision Tree': '#E6B94A', 'SVM': '#D05A74', 'KNN': '#9479E6'
     }
     fig_fold = go.Figure()
     for model, vals in folds_data.items():
@@ -716,10 +551,10 @@ with tab6:
                         'Risk Class', 'Risk Score', '# BURUK', '# KURANG', 'Thermal?', 'Last Inspected']
 
     def color_risk(val):
-        cmap = {'CRITICAL': 'background-color:#ff475730;color:#ff6b7a',
-                'HIGH': 'background-color:#ffa50230;color:#ffb830',
-                'MEDIUM': 'background-color:#3d8eff30;color:#6aaeff',
-                'LOW': 'background-color:#00d4aa20;color:#00d4aa'}
+        cmap = {'CRITICAL': 'background-color:#F0616D30;color:#F0616D',
+                'HIGH': 'background-color:#E6B94A30;color:#E6B94A',
+                'MEDIUM': 'background-color:#6FA8FF30;color:#6FA8FF',
+                'LOW': 'background-color:#22C98A20;color:#22C98A'}
         return cmap.get(val, '')
 
     styler = priority.style
